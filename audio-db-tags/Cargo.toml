@@ -1,0 +1,9 @@
+[package]
+authors = ["Samuel Sleight <samuel.sleight@gmail.com>"]
+edition = "2018"
+name = "audio-db-tags"
+version = "0.1.0"
+
+[dependencies]
+memmap = "0.7.0"
+deku = { git = "https://github.com/samuelsleight/deku", branch = "magic-values" }
