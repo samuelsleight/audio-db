@@ -3,9 +3,24 @@ use std::{
     path::Path,
 };
 
+use snafu::{Snafu, ResultExt};
+
 use memmap::MmapOptions;
 
 use deku::prelude::*;
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Error opening file for parsing: {}", source))]
+    OpenFile {
+        source: std::io::Error
+    },
+
+    #[snafu(display("Error parsing file: {}", source))]
+    ParseFile {
+        source: DekuError
+    }
+}
 
 #[derive(DekuRead)]
 #[deku(ctx = "endian: deku::ctx::Endian", endian = "endian")]
@@ -25,7 +40,8 @@ impl<T: DekuRead<deku::ctx::Endian>> CountThenVec<T> {
 
 impl CountThenVec<u8> {
     pub fn map_str(self) -> Result<String, DekuError> {
-        self.map().map(|vec| String::from_utf8(vec).unwrap())
+        let vec = self.map()?;
+        String::from_utf8(vec).map_err(|err| DekuError::Parse(err.to_string()))
     }
 }
 #[derive(Debug, DekuRead)]
@@ -232,9 +248,9 @@ pub struct Flac {
 }
 
 impl Flac {
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Flac {
-        let file = File::open(path).unwrap();
-        let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
-        Flac::from_bytes((mmap.as_ref(), 0)).unwrap().1
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Flac, Error> {
+        let file = File::open(path).context(OpenFile {})?;
+        let mmap = unsafe { MmapOptions::new().map(&file).context(OpenFile {})? };
+        Ok(Flac::from_bytes((mmap.as_ref(), 0)).context(ParseFile{})?.1)
     }
 }

@@ -6,4 +6,8 @@ version = "0.1.0"
 
 [dependencies]
 memmap = "0.7.0"
-deku = { git = "https://github.com/samuelsleight/deku", branch = "magic-values" }
+snafu = "0.6.9"
+
+[dependencies.deku]
+git = "https://github.com/samuelsleight/deku"
+branch = "magic-values"
