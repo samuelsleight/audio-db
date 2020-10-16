@@ -173,6 +173,12 @@ pub enum Metadata {
     #[deku(id = "0")]
     StreamInfo(StreamInfo),
 
+    #[deku(id = "1")]
+    Padding {
+        #[deku(count = "size / 8")]
+        padding: Vec<u8>
+    },
+
     #[deku(id = "3")]
     SeekTable {
         #[deku(count = "size / 18")]
