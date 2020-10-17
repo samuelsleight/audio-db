@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, ErrorContextExt},
-    parsing::CountThenVec,
+    parsing::{CountThenVec, U8ToBool}
 };
 
 use std::{fs::File, path::Path};
@@ -14,22 +14,22 @@ pub struct StreamInfo {
     min_block_size: u16,
     max_block_size: u16,
 
-    #[deku(bits = "24")]
+    #[deku(bits = 24)]
     min_frame_size: u32,
 
-    #[deku(bits = "24")]
+    #[deku(bits = 24)]
     max_frame_size: u32,
 
-    #[deku(bits = "20")]
+    #[deku(bits = 20)]
     sample_rate: u32,
 
-    #[deku(bits = "3")]
+    #[deku(bits = 3)]
     channels: u8,
 
-    #[deku(bits = "5")]
+    #[deku(bits = 5)]
     bits_per_sample: u8,
 
-    #[deku(bits = "36")]
+    #[deku(bits = 36)]
     total_samples: u64,
 
     md5_signature: u128,
@@ -179,8 +179,8 @@ impl Metadata {
         #[derive(DekuRead)]
         #[deku(endian = "big")]
         struct MetadataHeader {
-            #[deku(bits = 1)]
-            is_last: u8,
+            #[deku(map = "U8ToBool::map")]
+            is_last: bool,
 
             #[deku(bits = 7)]
             block_type: u8,
@@ -198,7 +198,7 @@ impl Metadata {
 
             vec.push(metadata);
 
-            if header.is_last != 0 {
+            if header.is_last {
                 return Ok((newer_rest, vec));
             }
 

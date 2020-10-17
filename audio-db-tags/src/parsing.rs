@@ -22,3 +22,16 @@ impl CountThenVec<u8> {
         String::from_utf8(vec).map_err(|err| DekuError::Parse(err.to_string()))
     }
 }
+
+#[derive(DekuRead)]
+#[deku(ctx = "endian: deku::ctx::Endian", endian = "endian")]
+pub(crate) struct U8ToBool {
+    #[deku(bits = 1)]
+    value: u8,
+}
+
+impl U8ToBool {
+    pub(crate) fn map(self) -> Result<bool, DekuError> {
+        Ok(self.value != 0)
+    }
+}
