@@ -36,7 +36,7 @@ enum EncodedStringBuffer {
     Ucs2 {
         bom: [u8; 2],
 
-        #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", count = "size / 2")]
+        #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", count = "(size - 2) / 2")]
         buffer: Vec<u16>
     },
 }
@@ -46,7 +46,7 @@ enum EncodedStringBuffer {
 struct EncodedString {
     encoding: u8,
 
-    #[deku(ctx = "size - 3, *encoding")]
+    #[deku(ctx = "size - 1, *encoding")]
     buffer: EncodedStringBuffer
 }
 
