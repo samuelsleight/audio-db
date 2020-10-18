@@ -23,7 +23,6 @@ fn extract_28bit_size(mut bytes: u32) -> Result<u32, DekuError> {
     Ok(size)
 }
 
-
 #[derive(Debug, DekuRead)]
 #[deku(ctx = "endian: deku::ctx::Endian, size: u32, encoding: u8", id = "encoding", endian = "endian")]
 enum EncodedStringBuffer {
@@ -35,18 +34,19 @@ enum EncodedStringBuffer {
 
     #[deku(id = "1")]
     Ucs2 {
-        #[deku(count = "size / 2")]
+        bom: [u8; 2],
+
+        #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", count = "size / 2")]
         buffer: Vec<u16>
     },
 }
+
 #[derive(Debug, DekuRead)]
 #[deku(ctx = "endian: deku::ctx::Endian, size: u32", endian = "endian")]
 struct EncodedString {
     encoding: u8,
 
-    bom: [u8; 2],
-
-    #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", ctx = "size - 3, *encoding")]
+    #[deku(ctx = "size - 3, *encoding")]
     buffer: EncodedStringBuffer
 }
 
@@ -54,7 +54,73 @@ impl EncodedString {
     fn map(self) -> Result<String, DekuError> {
         let utf8 = match self.buffer {
             EncodedStringBuffer::Utf8{buffer} => buffer,
-            EncodedStringBuffer::Ucs2{buffer} => {
+            EncodedStringBuffer::Ucs2{buffer, ..} => {
+                let mut decoded = Vec::new();
+                decoded.resize(buffer.len() * 3, 0);
+                let size = ucs2::decode(&buffer, &mut decoded).map_err(|err| DekuError::Parse(format!("Error decoding UCS2: {:#?}", err)))?;
+                decoded.resize(size, 0);
+                decoded
+            }
+        };
+
+        let string = String::from_utf8(utf8).map_err(|err| DekuError::Parse(err.to_string()))?;
+        Ok(string.trim_end_matches(char::from(0)).into())
+    }
+}
+
+struct NullTerminatedVec<T> {
+    vec: Vec<T>,
+}
+
+impl<T> DekuRead<deku::ctx::Endian> for NullTerminatedVec<T> where T: DekuRead<deku::ctx::Endian> + PartialEq + Default {
+    fn read(mut rest: &BitSlice<Msb0, u8>, ctx: deku::ctx::Endian) -> Result<(&BitSlice<Msb0, u8>, Self), DekuError>
+    where
+        Self: Sized 
+    {
+        let mut vec = Vec::new();
+
+        loop {
+            let (new_rest, value) = T::read(rest, ctx)?;
+            rest = new_rest;
+
+            if value == T::default() {
+                return Ok((rest, NullTerminatedVec{vec}))
+            }
+
+            vec.push(value);
+        }
+    }
+}
+
+impl<T> NullTerminatedVec<T> {
+    fn map(self) -> Result<Vec<T>, DekuError> {
+        Ok(self.vec)
+    }
+}
+
+#[derive(Debug, DekuRead)]
+#[deku(ctx = "endian: deku::ctx::Endian, encoding: u8", id = "encoding", endian = "endian")]
+enum NullTerminatedEncodedStringBuffer {
+    #[deku(id = "0")]
+    Utf8 {
+        #[deku(map = "NullTerminatedVec::<u8>::map")]
+        buffer: Vec<u8>
+    },
+
+    #[deku(id = "1")]
+    Ucs2 {
+        bom: [u8; 2],
+
+        #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", map = "NullTerminatedVec::<u16>::map")]
+        buffer: Vec<u16>
+    },
+}
+
+impl NullTerminatedEncodedStringBuffer {
+    fn map(self) -> Result<String, DekuError> {
+        let utf8 = match self {
+            NullTerminatedEncodedStringBuffer::Utf8{buffer} => buffer,
+            NullTerminatedEncodedStringBuffer::Ucs2{buffer, ..} => {
                 let mut decoded = Vec::new();
                 decoded.resize(buffer.len() * 3, 0);
                 let size = ucs2::decode(&buffer, &mut decoded).map_err(|err| DekuError::Parse(format!("Error decoding UCS2: {:#?}", err)))?;
@@ -69,6 +135,41 @@ impl EncodedString {
 }
 
 #[derive(Debug, DekuRead)]
+#[deku(ctx = "encoding: u8, endian: deku::ctx::Endian", endian = "endian")]
+pub struct PictureMetadata {
+    #[deku(ctx = "0", map = "NullTerminatedEncodedStringBuffer::map")]
+    mime_type: String,
+
+    picture_type: u8,
+
+    #[deku(ctx = "encoding", map = "NullTerminatedEncodedStringBuffer::map")]
+    description: String,
+}
+
+#[derive(Debug, DekuRead)]
+#[deku(ctx = "metadata: PictureMetadata, size: u32", endian = "big")]
+pub struct Picture {
+    #[deku(skip, default = "metadata")]
+    metadata: PictureMetadata,
+
+    #[deku(count = "size")]
+    picture: Vec<u8>
+}
+
+impl Picture {
+    fn read_frame(
+        rest: &BitSlice<Msb0, u8>,
+        size: u32
+    ) -> Result<(&BitSlice<Msb0, u8>, Picture), DekuError> {
+        let (new_rest, encoding) = u8::read(rest, ())?;
+        let (post_metadata, metadata) = PictureMetadata::read(new_rest, (encoding, deku::ctx::Endian::Big))?;
+        let read_bits = rest.offset_from(post_metadata);
+        let read_bytes = read_bits / 8;
+        Picture::read(post_metadata, (metadata, size - read_bytes as u32))
+    }
+}
+
+#[derive(Debug, DekuRead)]
 #[deku(ctx = "variant: u8, frame_id: String, size: u32", id = "variant", endian = "big")]
 pub enum Frame {
     #[deku(id = "0")]
@@ -78,6 +179,12 @@ pub enum Frame {
 
         #[deku(ctx = "size", map = "EncodedString::map")]
         text: String,
+    },
+
+    #[deku(id = "1")]
+    Picture {
+        #[deku(reader = "Picture::read_frame(rest, size)")]
+        picture: Picture
     }
 }
 
@@ -177,13 +284,13 @@ impl Frame {
 
             let id = match frame_header.id.as_slice() {
                 b"TIT2" | b"TPE1" | b"TRCK" | b"TALB" => 0u8,
+                b"APIC" => 1,
                 _ => return Err(DekuError::Parse(format!("Unsupported frame ID: {}", String::from_utf8_lossy(&frame_header.id))))
             };
 
             let (new_rest, frame) = Frame::read(rest, (id, String::from_utf8(frame_header.id).unwrap(), frame_size))?;
             rest = new_rest;
 
-            println!("FRAME: \n{:#?}", frame);
             vec.push(frame);
         }
 
