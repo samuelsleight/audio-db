@@ -283,7 +283,7 @@ impl Frame {
             let frame_size = frame_header.size - extra_read_bytes as u32;
 
             let id = match frame_header.id.as_slice() {
-                b"TIT2" | b"TPE1" | b"TRCK" | b"TALB" => 0u8,
+                b"TIT2" | b"TPE1" | b"TRCK" | b"TALB" | b"TPOS" | b"TDAT" | b"TORY" | b"TYER" | b"TPUB" | b"TMED" | b"TPE2" | b"TSO2" | b"TSOP" | b"TXXX" => 0u8,
                 b"APIC" => 1,
                 _ => return Err(DekuError::Parse(format!("Unsupported frame ID: {}", String::from_utf8_lossy(&frame_header.id))))
             };
