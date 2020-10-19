@@ -84,8 +84,10 @@ impl EncodedString {
 }
 
 #[derive(Debug, DekuRead)]
-#[deku(ctx = "encoding: u8, endian: deku::ctx::Endian", endian = "endian")]
-pub struct PictureMetadata {
+#[deku(ctx = "endian: deku::ctx::Endian, size: u32", endian = "endian")]
+pub struct Picture {
+    encoding: u8,
+
     #[deku(
         ctx = "BufferKind::NullTerminated, 0",
         map = "EncodedStringBuffer::map"
@@ -95,34 +97,13 @@ pub struct PictureMetadata {
     picture_type: u8,
 
     #[deku(
-        ctx = "BufferKind::NullTerminated, encoding",
+        ctx = "BufferKind::NullTerminated, *encoding",
         map = "EncodedStringBuffer::map"
     )]
     description: String,
-}
 
-#[derive(Debug, DekuRead)]
-#[deku(ctx = "metadata: PictureMetadata, size: u32", endian = "big")]
-pub struct Picture {
-    #[deku(skip, default = "metadata")]
-    metadata: PictureMetadata,
-
-    #[deku(count = "size")]
+    #[deku(count = "size - (input.offset_from(rest) as u32 / 8)")]
     picture: Vec<u8>,
-}
-
-impl Picture {
-    fn read_frame(
-        rest: &BitSlice<Msb0, u8>,
-        size: u32,
-    ) -> Result<(&BitSlice<Msb0, u8>, Picture), DekuError> {
-        let (new_rest, encoding) = u8::read(rest, ())?;
-        let (post_metadata, metadata) =
-            PictureMetadata::read(new_rest, (encoding, deku::ctx::Endian::Big))?;
-        let read_bits = rest.offset_from(post_metadata);
-        let read_bytes = read_bits / 8;
-        Picture::read(post_metadata, (metadata, size - read_bytes as u32))
-    }
 }
 
 #[derive(Debug, DekuRead)]
@@ -176,7 +157,7 @@ pub enum Frame {
 
     #[deku(id = "1")]
     Picture {
-        #[deku(reader = "Picture::read_frame(rest, size)")]
+        #[deku(ctx = "size")]
         picture: Picture,
     },
 
