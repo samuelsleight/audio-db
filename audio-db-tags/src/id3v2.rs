@@ -126,6 +126,19 @@ impl Picture {
 }
 
 #[derive(Debug, DekuRead)]
+#[deku(ctx = "endian: deku::ctx::Endian, size: u32", endian = "endian")]
+pub struct Ufid {
+    #[deku(
+        ctx = "BufferKind::NullTerminated, 0",
+        map = "EncodedStringBuffer::map"
+    )]
+    vendor: String,
+
+    #[deku(count = "size as usize - (vendor.len() + 1)")]
+    ufid: Vec<u8>,
+}
+
+#[derive(Debug, DekuRead)]
 #[deku(
     ctx = "variant: u8, frame_id: String, size: u32",
     id = "variant",
@@ -145,6 +158,12 @@ pub enum Frame {
     Picture {
         #[deku(reader = "Picture::read_frame(rest, size)")]
         picture: Picture,
+    },
+
+    #[deku(id = "2")]
+    Ufid {
+        #[deku(ctx = "size")]
+        ufid: Ufid,
     },
 }
 
@@ -250,6 +269,7 @@ impl Frame {
                 b"TIT2" | b"TPE1" | b"TRCK" | b"TALB" | b"TPOS" | b"TDAT" | b"TORY" | b"TYER"
                 | b"TPUB" | b"TMED" | b"TPE2" | b"TSO2" | b"TSOP" | b"TXXX" => 0u8,
                 b"APIC" => 1,
+                b"UFID" => 2,
                 _ => {
                     return Err(DekuError::Parse(format!(
                         "Unsupported frame ID: {}",
