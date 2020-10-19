@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, ErrorContextExt},
-    parsing::{U8ToBool, Buffer, BufferKind}
+    parsing::{Buffer, BufferKind, U8ToBool},
 };
 
 use std::{fs::File, path::Path};
@@ -24,31 +24,40 @@ fn extract_28bit_size(mut bytes: u32) -> Result<u32, DekuError> {
 }
 
 #[derive(Debug, DekuRead)]
-#[deku(ctx = "endian: deku::ctx::Endian, kind: BufferKind, encoding: u8", id = "encoding", endian = "endian")]
+#[deku(
+    ctx = "endian: deku::ctx::Endian, kind: BufferKind, encoding: u8",
+    id = "encoding",
+    endian = "endian"
+)]
 enum EncodedStringBuffer {
     #[deku(id = "0")]
     Utf8 {
         #[deku(ctx = "kind", map = "Buffer::<u8>::map")]
-        buffer: Vec<u8>
+        buffer: Vec<u8>,
     },
 
     #[deku(id = "1")]
     Ucs2 {
         bom: [u8; 2],
 
-        #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", ctx = "kind.ucs2_adjusted()", map = "Buffer::<u16>::map")]
-        buffer: Vec<u16>
+        #[deku(
+            endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }",
+            ctx = "kind.ucs2_adjusted()",
+            map = "Buffer::<u16>::map"
+        )]
+        buffer: Vec<u16>,
     },
 }
 
 impl EncodedStringBuffer {
     fn map(self) -> Result<String, DekuError> {
         let utf8 = match self {
-            EncodedStringBuffer::Utf8{buffer} => buffer,
-            EncodedStringBuffer::Ucs2{buffer, ..} => {
+            EncodedStringBuffer::Utf8 { buffer } => buffer,
+            EncodedStringBuffer::Ucs2 { buffer, .. } => {
                 let mut decoded = Vec::new();
                 decoded.resize(buffer.len() * 3, 0);
-                let size = ucs2::decode(&buffer, &mut decoded).map_err(|err| DekuError::Parse(format!("Error decoding UCS2: {:#?}", err)))?;
+                let size = ucs2::decode(&buffer, &mut decoded)
+                    .map_err(|err| DekuError::Parse(format!("Error decoding UCS2: {:#?}", err)))?;
                 decoded.resize(size, 0);
                 decoded
             }
@@ -65,7 +74,7 @@ struct EncodedString {
     encoding: u8,
 
     #[deku(ctx = "BufferKind::Sized(size - 1), *encoding")]
-    buffer: EncodedStringBuffer
+    buffer: EncodedStringBuffer,
 }
 
 impl EncodedString {
@@ -77,12 +86,18 @@ impl EncodedString {
 #[derive(Debug, DekuRead)]
 #[deku(ctx = "encoding: u8, endian: deku::ctx::Endian", endian = "endian")]
 pub struct PictureMetadata {
-    #[deku(ctx = "BufferKind::NullTerminated, 0", map = "EncodedStringBuffer::map")]
+    #[deku(
+        ctx = "BufferKind::NullTerminated, 0",
+        map = "EncodedStringBuffer::map"
+    )]
     mime_type: String,
 
     picture_type: u8,
 
-    #[deku(ctx = "BufferKind::NullTerminated, encoding", map = "EncodedStringBuffer::map")]
+    #[deku(
+        ctx = "BufferKind::NullTerminated, encoding",
+        map = "EncodedStringBuffer::map"
+    )]
     description: String,
 }
 
@@ -93,16 +108,17 @@ pub struct Picture {
     metadata: PictureMetadata,
 
     #[deku(count = "size")]
-    picture: Vec<u8>
+    picture: Vec<u8>,
 }
 
 impl Picture {
     fn read_frame(
         rest: &BitSlice<Msb0, u8>,
-        size: u32
+        size: u32,
     ) -> Result<(&BitSlice<Msb0, u8>, Picture), DekuError> {
         let (new_rest, encoding) = u8::read(rest, ())?;
-        let (post_metadata, metadata) = PictureMetadata::read(new_rest, (encoding, deku::ctx::Endian::Big))?;
+        let (post_metadata, metadata) =
+            PictureMetadata::read(new_rest, (encoding, deku::ctx::Endian::Big))?;
         let read_bits = rest.offset_from(post_metadata);
         let read_bytes = read_bits / 8;
         Picture::read(post_metadata, (metadata, size - read_bytes as u32))
@@ -110,7 +126,11 @@ impl Picture {
 }
 
 #[derive(Debug, DekuRead)]
-#[deku(ctx = "variant: u8, frame_id: String, size: u32", id = "variant", endian = "big")]
+#[deku(
+    ctx = "variant: u8, frame_id: String, size: u32",
+    id = "variant",
+    endian = "big"
+)]
 pub enum Frame {
     #[deku(id = "0")]
     TextField {
@@ -124,8 +144,8 @@ pub enum Frame {
     #[deku(id = "1")]
     Picture {
         #[deku(reader = "Picture::read_frame(rest, size)")]
-        picture: Picture
-    }
+        picture: Picture,
+    },
 }
 
 impl Frame {
@@ -158,11 +178,15 @@ impl Frame {
         rest = post_header;
 
         if header.unsynchronisation {
-            return Err(DekuError::Parse(format!("ID3v2 unsynchronisation is not yet implemented")));
+            return Err(DekuError::Parse(format!(
+                "ID3v2 unsynchronisation is not yet implemented"
+            )));
         }
 
         if header.extended_header {
-            return Err(DekuError::Parse(format!("ID3v2 extended headers are not yet implemented")));
+            return Err(DekuError::Parse(format!(
+                "ID3v2 extended headers are not yet implemented"
+            )));
         }
 
         #[derive(Debug, DekuRead)]
@@ -223,12 +247,21 @@ impl Frame {
             let frame_size = frame_header.size - extra_read_bytes as u32;
 
             let id = match frame_header.id.as_slice() {
-                b"TIT2" | b"TPE1" | b"TRCK" | b"TALB" | b"TPOS" | b"TDAT" | b"TORY" | b"TYER" | b"TPUB" | b"TMED" | b"TPE2" | b"TSO2" | b"TSOP" | b"TXXX" => 0u8,
+                b"TIT2" | b"TPE1" | b"TRCK" | b"TALB" | b"TPOS" | b"TDAT" | b"TORY" | b"TYER"
+                | b"TPUB" | b"TMED" | b"TPE2" | b"TSO2" | b"TSOP" | b"TXXX" => 0u8,
                 b"APIC" => 1,
-                _ => return Err(DekuError::Parse(format!("Unsupported frame ID: {}", String::from_utf8_lossy(&frame_header.id))))
+                _ => {
+                    return Err(DekuError::Parse(format!(
+                        "Unsupported frame ID: {}",
+                        String::from_utf8_lossy(&frame_header.id)
+                    )))
+                }
             };
 
-            let (new_rest, frame) = Frame::read(rest, (id, String::from_utf8(frame_header.id).unwrap(), frame_size))?;
+            let (new_rest, frame) = Frame::read(
+                rest,
+                (id, String::from_utf8(frame_header.id).unwrap(), frame_size),
+            )?;
             rest = new_rest;
 
             vec.push(frame);
@@ -242,7 +275,7 @@ impl Frame {
 #[deku(endian = "big", magic = b"ID3")]
 pub struct Id3v2 {
     #[deku(reader = "Frame::read_vec(rest)")]
-    frames: Vec<Frame>
+    frames: Vec<Frame>,
 }
 
 impl Id3v2 {

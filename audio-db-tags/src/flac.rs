@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, ErrorContextExt},
-    parsing::{CountThenVec, U8ToBool}
+    parsing::{CountThenVec, U8ToBool},
 };
 
 use std::{fs::File, path::Path};

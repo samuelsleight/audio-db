@@ -38,20 +38,20 @@ impl U8ToBool {
 
 pub(crate) enum BufferKind {
     NullTerminated,
-    Sized(u32)
+    Sized(u32),
 }
 
 impl BufferKind {
     pub(crate) fn ucs2_adjusted(self) -> BufferKind {
         match self {
             BufferKind::NullTerminated => BufferKind::NullTerminated,
-            BufferKind::Sized(size) => BufferKind::Sized((size / 2) - 1)
+            BufferKind::Sized(size) => BufferKind::Sized((size / 2) - 1),
         }
     }
 }
 
 pub(crate) struct Buffer<T> {
-    buffer: Vec<T>
+    buffer: Vec<T>,
 }
 
 impl<T> Buffer<T> {
@@ -62,14 +62,20 @@ impl<T> Buffer<T> {
 
 impl<T> From<Vec<T>> for Buffer<T> {
     fn from(vec: Vec<T>) -> Buffer<T> {
-        Buffer{buffer: vec}
+        Buffer { buffer: vec }
     }
 }
 
-impl<T> DekuRead<(deku::ctx::Endian, BufferKind)> for Buffer<T> where T: DekuRead<deku::ctx::Endian> + PartialEq + Default + std::fmt::Debug{
-    fn read(mut rest: &BitSlice<Msb0, u8>, (endian, kind): (deku::ctx::Endian, BufferKind)) -> Result<(&BitSlice<Msb0, u8>, Self), DekuError>
+impl<T> DekuRead<(deku::ctx::Endian, BufferKind)> for Buffer<T>
+where
+    T: DekuRead<deku::ctx::Endian> + PartialEq + Default + std::fmt::Debug,
+{
+    fn read(
+        mut rest: &BitSlice<Msb0, u8>,
+        (endian, kind): (deku::ctx::Endian, BufferKind),
+    ) -> Result<(&BitSlice<Msb0, u8>, Self), DekuError>
     where
-        Self: Sized 
+        Self: Sized,
     {
         match kind {
             BufferKind::NullTerminated => {
@@ -80,7 +86,7 @@ impl<T> DekuRead<(deku::ctx::Endian, BufferKind)> for Buffer<T> where T: DekuRea
                     rest = new_rest;
 
                     if value == T::default() {
-                        return Ok((rest, vec.into()))
+                        return Ok((rest, vec.into()));
                     }
 
                     vec.push(value);
@@ -88,7 +94,8 @@ impl<T> DekuRead<(deku::ctx::Endian, BufferKind)> for Buffer<T> where T: DekuRea
             }
 
             BufferKind::Sized(size) => {
-                let (new_rest, vec) = Vec::<T>::read(rest, (deku::ctx::Count(size as usize), endian))?;
+                let (new_rest, vec) =
+                    Vec::<T>::read(rest, (deku::ctx::Count(size as usize), endian))?;
                 Ok((new_rest, vec.into()))
             }
         }
