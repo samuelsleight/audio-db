@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, ErrorContextExt},
-    parsing::U8ToBool,
+    parsing::{U8ToBool, Buffer, BufferKind}
 };
 
 use std::{fs::File, path::Path};
@@ -24,11 +24,11 @@ fn extract_28bit_size(mut bytes: u32) -> Result<u32, DekuError> {
 }
 
 #[derive(Debug, DekuRead)]
-#[deku(ctx = "endian: deku::ctx::Endian, size: u32, encoding: u8", id = "encoding", endian = "endian")]
+#[deku(ctx = "endian: deku::ctx::Endian, kind: BufferKind, encoding: u8", id = "encoding", endian = "endian")]
 enum EncodedStringBuffer {
     #[deku(id = "0")]
     Utf8 {
-        #[deku(count = "size")]
+        #[deku(ctx = "kind", map = "Buffer::<u8>::map")]
         buffer: Vec<u8>
     },
 
@@ -36,23 +36,14 @@ enum EncodedStringBuffer {
     Ucs2 {
         bom: [u8; 2],
 
-        #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", count = "(size - 2) / 2")]
+        #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", ctx = "kind.ucs2_adjusted()", map = "Buffer::<u16>::map")]
         buffer: Vec<u16>
     },
 }
 
-#[derive(Debug, DekuRead)]
-#[deku(ctx = "endian: deku::ctx::Endian, size: u32", endian = "endian")]
-struct EncodedString {
-    encoding: u8,
-
-    #[deku(ctx = "size - 1, *encoding")]
-    buffer: EncodedStringBuffer
-}
-
-impl EncodedString {
+impl EncodedStringBuffer {
     fn map(self) -> Result<String, DekuError> {
-        let utf8 = match self.buffer {
+        let utf8 = match self {
             EncodedStringBuffer::Utf8{buffer} => buffer,
             EncodedStringBuffer::Ucs2{buffer, ..} => {
                 let mut decoded = Vec::new();
@@ -68,81 +59,30 @@ impl EncodedString {
     }
 }
 
-struct NullTerminatedVec<T> {
-    vec: Vec<T>,
-}
-
-impl<T> DekuRead<deku::ctx::Endian> for NullTerminatedVec<T> where T: DekuRead<deku::ctx::Endian> + PartialEq + Default {
-    fn read(mut rest: &BitSlice<Msb0, u8>, ctx: deku::ctx::Endian) -> Result<(&BitSlice<Msb0, u8>, Self), DekuError>
-    where
-        Self: Sized 
-    {
-        let mut vec = Vec::new();
-
-        loop {
-            let (new_rest, value) = T::read(rest, ctx)?;
-            rest = new_rest;
-
-            if value == T::default() {
-                return Ok((rest, NullTerminatedVec{vec}))
-            }
-
-            vec.push(value);
-        }
-    }
-}
-
-impl<T> NullTerminatedVec<T> {
-    fn map(self) -> Result<Vec<T>, DekuError> {
-        Ok(self.vec)
-    }
-}
-
 #[derive(Debug, DekuRead)]
-#[deku(ctx = "endian: deku::ctx::Endian, encoding: u8", id = "encoding", endian = "endian")]
-enum NullTerminatedEncodedStringBuffer {
-    #[deku(id = "0")]
-    Utf8 {
-        #[deku(map = "NullTerminatedVec::<u8>::map")]
-        buffer: Vec<u8>
-    },
+#[deku(ctx = "endian: deku::ctx::Endian, size: u32", endian = "endian")]
+struct EncodedString {
+    encoding: u8,
 
-    #[deku(id = "1")]
-    Ucs2 {
-        bom: [u8; 2],
-
-        #[deku(endian = "if bom[0] == 0xFF { deku::ctx::Endian::Little } else { deku::ctx::Endian::Big }", map = "NullTerminatedVec::<u16>::map")]
-        buffer: Vec<u16>
-    },
+    #[deku(ctx = "BufferKind::Sized(size - 1), *encoding")]
+    buffer: EncodedStringBuffer
 }
 
-impl NullTerminatedEncodedStringBuffer {
+impl EncodedString {
     fn map(self) -> Result<String, DekuError> {
-        let utf8 = match self {
-            NullTerminatedEncodedStringBuffer::Utf8{buffer} => buffer,
-            NullTerminatedEncodedStringBuffer::Ucs2{buffer, ..} => {
-                let mut decoded = Vec::new();
-                decoded.resize(buffer.len() * 3, 0);
-                let size = ucs2::decode(&buffer, &mut decoded).map_err(|err| DekuError::Parse(format!("Error decoding UCS2: {:#?}", err)))?;
-                decoded.resize(size, 0);
-                decoded
-            }
-        };
-
-        let string = String::from_utf8(utf8).map_err(|err| DekuError::Parse(err.to_string()))?;
-        Ok(string.trim_end_matches(char::from(0)).into())
+        self.buffer.map()
     }
 }
 
 #[derive(Debug, DekuRead)]
 #[deku(ctx = "encoding: u8, endian: deku::ctx::Endian", endian = "endian")]
 pub struct PictureMetadata {
-    #[deku(ctx = "0", map = "NullTerminatedEncodedStringBuffer::map")]
+    #[deku(ctx = "BufferKind::NullTerminated, 0", map = "EncodedStringBuffer::map")]
     mime_type: String,
 
     picture_type: u8,
 
-    #[deku(ctx = "encoding", map = "NullTerminatedEncodedStringBuffer::map")]
+    #[deku(ctx = "BufferKind::NullTerminated, encoding", map = "EncodedStringBuffer::map")]
     description: String,
 }
 
