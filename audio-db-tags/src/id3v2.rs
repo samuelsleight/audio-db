@@ -274,7 +274,9 @@ impl Frame {
 
             let id = match frame_header.id.as_slice() {
                 b"TIT2" | b"TPE1" | b"TRCK" | b"TALB" | b"TPOS" | b"TDAT" | b"TORY" | b"TYER"
-                | b"TPUB" | b"TMED" | b"TPE2" | b"TSO2" | b"TSOP" | b"TXXX" => 0u8,
+                | b"TPUB" | b"TMED" | b"TPE2" | b"TSO2" | b"TSOP" | b"TLEN" | b"TCON" | b"TXXX"
+                | b"TSSE" | b"TSRC" | b"TSST" | b"TCOM" | b"TENC" | b"TCMP" | b"TEXT" | b"TCOP"
+                | b"TSOC" | b"TIT1" | b"TIT3" | b"TBPM" | b"TSOA" | b"TSOT" | b"TPE3" | b"TKEY" => 0u8,
                 b"APIC" => 1,
                 b"UFID" => 2,
                 b"COMM" => 3,
