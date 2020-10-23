@@ -73,7 +73,7 @@ dependencies = [
 [[package]]
 name = "deku"
 version = "0.8.0"
-source = "git+https://github.com/samuelsleight/deku?branch=magic-values#507ecfccc66b1e10fa53ed7daf168fdda23498f8"
+source = "git+https://github.com/samuelsleight/deku?branch=boxless-read-until#49f5e98a3187722041f461584b99e1a00d4147b1"
 dependencies = [
  "bitvec",
  "deku_derive",
@@ -82,7 +82,7 @@ dependencies = [
 [[package]]
 name = "deku_derive"
 version = "0.8.0"
-source = "git+https://github.com/samuelsleight/deku?branch=magic-values#507ecfccc66b1e10fa53ed7daf168fdda23498f8"
+source = "git+https://github.com/samuelsleight/deku?branch=boxless-read-until#49f5e98a3187722041f461584b99e1a00d4147b1"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -183,9 +183,9 @@ checksum = "6446ced80d6c486436db5c078dde11a9f73d42b57fb273121e160b84f63d894c"
 
 [[package]]
 name = "syn"
-version = "1.0.44"
+version = "1.0.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e03e57e4fcbfe7749842d53e24ccb9aa12b7252dbe5e91d2acad31834c8b8fdd"
+checksum = "5ad5de3220ea04da322618ded2c42233d02baca219d6f160a3e9c87cda16c942"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -200,9 +200,9 @@ checksum = "36474e732d1affd3a6ed582781b3683df3d0563714c59c39591e8ff707cf078e"
 
 [[package]]
 name = "ucs2"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85061f4e43545a613c0da6b87725bf23f8da8613cf2473719c4f71a270c4ce8a"
+checksum = "bad643914094137d475641b6bab89462505316ec2ce70907ad20102d28a79ab8"
 dependencies = [
  "bit_field",
 ]

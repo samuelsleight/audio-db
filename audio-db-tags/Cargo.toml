@@ -11,4 +11,4 @@ ucs2 = "0.3.1"
 
 [dependencies.deku]
 git = "https://github.com/samuelsleight/deku"
-branch = "magic-values"
+branch = "boxless-read-until"

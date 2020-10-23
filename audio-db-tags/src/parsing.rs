@@ -71,7 +71,7 @@ where
     T: DekuRead<deku::ctx::Endian> + PartialEq + Default + std::fmt::Debug,
 {
     fn read(
-        mut rest: &BitSlice<Msb0, u8>,
+        rest: &BitSlice<Msb0, u8>,
         (endian, kind): (deku::ctx::Endian, BufferKind),
     ) -> Result<(&BitSlice<Msb0, u8>, Self), DekuError>
     where
@@ -79,23 +79,15 @@ where
     {
         match kind {
             BufferKind::NullTerminated => {
-                let mut vec = Vec::new();
-
-                loop {
-                    let (new_rest, value) = T::read(rest, endian)?;
-                    rest = new_rest;
-
-                    if value == T::default() {
-                        return Ok((rest, vec.into()));
-                    }
-
-                    vec.push(value);
-                }
+                let null = T::default();
+                let (new_rest, vec) =
+                    Vec::<T>::read(rest, ((move |value: &T| *value == null).into(), endian))?;
+                Ok((new_rest, vec.into()))
             }
 
             BufferKind::Sized(size) => {
                 let (new_rest, vec) =
-                    Vec::<T>::read(rest, (deku::ctx::Count(size as usize), endian))?;
+                    Vec::<T>::read(rest, ((size as usize).into(), endian))?;
                 Ok((new_rest, vec.into()))
             }
         }
